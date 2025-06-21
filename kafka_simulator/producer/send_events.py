@@ -35,5 +35,5 @@ if __name__ == "__main__":
     while True:
         event = generate_event()
         producer.produce(topic, json.dumps(event).encode("utf-8"), callback=delivery_report)
-        producer.poll(0)
+        producer.poll(1)
         time.sleep(1)
