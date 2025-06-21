@@ -11,13 +11,19 @@ if __name__ == "__main__":
 
     ss.sparkContext.setLogLevel("WARN")
 
-    schema = StructType() \
-    .add("user_id", StringType()) \
-    .add("webtoon_id", StringType()) \
-    .add("episode_id", StringType()) \
-    .add("action", StringType()) \
-    .add("scroll_ratio", DoubleType()) \
-    .add("timestamp", StringType())
+    schema = StructType([
+        StructField("session_id", StringType(), True), \
+        StructField("user_id", StringType(), True), \
+        StructField("webtoon_id", StringType(), True), \
+        StructField("episode_id", StringType(), True), \
+        StructField("action", StringType(), True), \
+        StructField("scroll_ratio", FloatType(), True), \
+        StructField("timestamp", StringType(), True), \
+        StructField("country_code", StringType(), True), \
+        StructField("ip_address", StringType(), True), \
+        StructField("device_type", StringType(), True), \
+        StructField("browser", StringType(), True)
+    ])
 
     df = ss.readStream \
     .format("kafka") \
