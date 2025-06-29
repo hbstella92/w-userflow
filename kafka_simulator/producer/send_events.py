@@ -1,76 +1,137 @@
-from confluent_kafka import Producer
-from faker import Faker
-import random
 import json
+import random
 import time
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
-fake = Faker()
-# Setting for kafka broker
-conf = {"bootstrap.servers": "localhost:9092"}
-producer = Producer(conf)
+from confluent_kafka import Producer
+from faker import Faker
 
-device_types = ["mobile", "tablet", "desktop"]
-browsers = ["Chrome", "Safari", "Firefox", "Edge", "Samsung Internet"]
-COUNTRIES = ["KR", "US", "JP", "TH", "ID", "BR", "TW", "FR"]
+NUM_USERS = 3
+MAX_SESSIONS_PER_USER = 3
+MAX_EPISODES_PER_SESSION = 3
 
-def generate_events():
-    session_id = str(uuid.uuid4())
-    user_id = fake.uuid4()
-    webtoon_id = f"toon_{random.randint(1, 20)}"
-    episode_id = f"ep_{random.randint(1, 30)}"
-    country_code = random.choice(COUNTRIES)
-    ip_address = fake.ipv4_public()
-    device_type = random.choice(device_types)
-    browser = random.choice(browsers)
-    timestamp_base = datetime.now(timezone.utc)
+REFERRERS = ["recommend", "search", "banner"]
+DEVICE_TYPES = ["Android", "iOS", "Tablet", "Desktop"]
+BROWSERS = ["Chrome", "Safari", "Firefox", "Edge"]
+APP_VERSIONS = ["1.0.0", "1.2.3", "2.0.0"]
+COUNTRIES = ["KR", "US", "JP", "TW", "TH", "ID", "VN", "FR", "ES", "DE"]
 
-    is_complete = random.random() < 0.6
 
-    sequence = [
-        {
-            "session_id": session_id,
-            "user_id": user_id,
-            "webtoon_id": webtoon_id,
-            "episode_id": episode_id,
-            "action": "enter",
-            "scroll_ratio": 0.0,
-            "timestamp": timestamp_base.isoformat(),
-            "country_code": country_code,
-            "ip_address": ip_address,
-            "device_type": device_type,
-            "browser": browser
-        },
-        {
-            "session_id": session_id,
-            "user_id": user_id,
-            "webtoon_id": webtoon_id,
-            "episode_id": episode_id,
-            "action": "scroll",
-            "scroll_ratio": round(random.uniform(0.3, 1.0), 2),
-            "timestamp": datetime.fromtimestamp(timestamp_base.timestamp() + 2, tz=timezone.utc).isoformat(),
-            "country_code": country_code,
-            "ip_address": ip_address,
-            "device_type": device_type,
-            "browser": browser
-        },
-        {
-            "session_id": session_id,
-            "user_id": user_id,
-            "webtoon_id": webtoon_id,
-            "episode_id": episode_id,
-            "action": "complete" if is_complete else "exit",
-            "scroll_ratio": 1.0 if is_complete else round(random.uniform(0.0, 0.6), 2),
-            "timestamp": datetime.fromtimestamp(timestamp_base.timestamp() + 4, tz=timezone.utc).isoformat(),
-            "country_code": country_code,
-            "ip_address": ip_address,
-            "device_type": device_type,
-            "browser": browser
-        }
-    ]
+def generate_events(user_id, signup_date):
+    events = []
+    current_time = signup_date + timedelta(days=random.randint(1, 10))
+    last_visit_date = None
 
-    return sequence
+    for _ in range(random.randint(1, MAX_SESSIONS_PER_USER)):
+        session_id = str(uuid.uuid4())
+
+        session_device = random.choice(DEVICE_TYPES)
+        session_app_version = random.choice(APP_VERSIONS)
+        session_country = random.choice(COUNTRIES)
+        session_referrer = random.choice(REFERRERS)
+
+        episode_counts = random.randint(1, MAX_EPISODES_PER_SESSION)
+
+        for ep_idx in range(episode_counts):
+            webtoon_id = f"webtoon_{random.randint(1, 10)}"
+            episode_id = f"{webtoon_id}_ep_{random.randint(1, 50)}"
+            scroll_ratio = round(random.uniform(0.1, 1.0), 2)
+            duration = random.randint(30, 180)  # second 단위
+            is_returning = random.random() < 0.2
+            thumbnail_clicked = random.random() < 0.8
+
+            # enter
+            events.append(
+                {
+                    "user_id": user_id,
+                    "signup_date": signup_date.date().isoformat(),
+                    "last_date": (
+                        last_visit_date.isoformat() if last_visit_date else None
+                    ),
+                    "session_id": session_id,
+                    "timestamp": current_time.isoformat(),
+                    "event_type": "enter",
+                    "referrer": session_referrer,
+                    "device_type": session_device,
+                    "app_version": session_app_version,
+                    "country": session_country,
+                    "webtoon_id": webtoon_id,
+                    "episode_id": episode_id,
+                    "episode_index_in_session": ep_idx + 1,
+                    "scroll_ratio": 0.0,
+                    "duration": 0,
+                    "dropoff_position": None,
+                    "is_returning_episode": is_returning,
+                    "thumbnail_clicked": thumbnail_clicked,
+                }
+            )
+
+            current_time += timedelta(seconds=random.randint(10, 30))
+
+            # scroll
+            events.append(
+                {
+                    "user_id": user_id,
+                    "signup_date": signup_date.date().isoformat(),
+                    "last_date": (
+                        last_visit_date.isoformat() if last_visit_date else None
+                    ),
+                    "session_id": session_id,
+                    "timestamp": current_time.isoformat(),
+                    "event_type": "scroll",
+                    "referrer": session_referrer,
+                    "device_type": session_device,
+                    "app_version": session_app_version,
+                    "country": session_country,
+                    "webtoon_id": webtoon_id,
+                    "episode_id": episode_id,
+                    "episode_index_in_session": ep_idx + 1,
+                    "scroll_ratio": scroll_ratio,
+                    "duration": duration,
+                    "dropoff_position": None,
+                    "is_returning_episode": is_returning,
+                    "thumbnail_clicked": thumbnail_clicked,
+                }
+            )
+
+            current_time += timedelta(seconds=duration)
+
+            # complete or exit
+            event_type = "complete" if scroll_ratio >= 0.9 else "exit"
+            dropoff_position = scroll_ratio if event_type == "exit" else None
+            events.append(
+                {
+                    "user_id": user_id,
+                    "signup_date": signup_date.date().isoformat(),
+                    "last_date": (
+                        last_visit_date.isoformat() if last_visit_date else None
+                    ),
+                    "session_id": session_id,
+                    "timestamp": current_time.isoformat(),
+                    "event_type": event_type,
+                    "referrer": session_referrer,
+                    "device_type": session_device,
+                    "app_version": session_app_version,
+                    "country": session_country,
+                    "webtoon_id": webtoon_id,
+                    "episode_id": episode_id,
+                    "episode_index_in_session": ep_idx + 1,
+                    "scroll_ratio": scroll_ratio,
+                    "duration": duration,
+                    "dropoff_position": dropoff_position,
+                    "is_returning_episode": is_returning,
+                    "thumbnail_clicked": thumbnail_clicked,
+                }
+            )
+
+            current_time += timedelta(minutes=random.randint(2, 5))
+
+        last_visit_date = current_time.date()
+        current_time += timedelta(minutes=35)
+
+    return events
+
 
 def delivery_report(err, msg):
     if err is not None:
@@ -80,13 +141,22 @@ def delivery_report(err, msg):
 
 
 if __name__ == "__main__":
+    fake = Faker()
+
+    producer = Producer({"bootstrap.servers": "localhost:9092"})
     topic = "webtoon-events"
 
     while True:
-        events = generate_events()
+        for i in range(NUM_USERS):
+            user_id = f"user_{i + 1}"
+            signup_date = datetime.utcnow() - timedelta(days=random.randint(10, 30))
 
-        for e in events:
-            producer.produce(topic, json.dumps(e).encode("utf-8"), callback=delivery_report)
-            producer.poll(1)
+            user_events = generate_events(user_id, signup_date)
 
-        time.sleep(1)
+            for e in user_events:
+                producer.produce(
+                    topic, json.dumps(e).encode("utf-8"), callback=delivery_report
+                )
+                producer.poll(1)
+
+            time.sleep(1)
